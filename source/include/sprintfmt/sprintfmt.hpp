@@ -92,270 +92,189 @@ namespace sprintfmt
 	}
 #endif
 	//
+	// この構造体は文字列型毎のユーティリティです。
+	//
+	template <typename S> struct Utils;
+
+	//
+	// この構造体はstd::string型用に特殊化されたユーティリティです。
+	//
+	template <> struct Utils<std::string> {
+		inline static const std::string::value_type eos = '\0';
+		inline static const std::string prefix = "%";
+		inline static const std::string suffix_hs = "hs";
+		inline static const std::string suffix_ls = "ls";
+		inline static const std::string suffix_d32 = "d";
+		inline static const std::string suffix_d64 = "lld";
+		inline static const std::string suffix_u32 = "u";
+		inline static const std::string suffix_u64 = "llu";
+		inline static const std::string suffix_f = "f";
+		inline static const std::string fmt_p32 = "0x%08X";
+		inline static const std::string fmt_p64 = "0x%016llX";
+		inline static constexpr const std::string& from_hs(const std::string& value) { return value; }
+		inline static std::string from_ls(const std::wstring& value) { return from_wide(value); }
+		inline static std::string::size_type strlen(const std::string::value_type* s) { return ::strlen(s); }
+		inline static constexpr int sprintf(
+			std::string::value_type* buffer, std::string::size_type buffer_size,
+			const std::string::value_type* fmt, auto&&... args)
+		{
+			return ::sprintf_s(buffer, buffer_size, fmt, args...);
+		}
+	};
+
+	//
+	// この構造体はstd::wstring型用に特殊化されたユーティリティです。
+	//
+	template <> struct Utils<std::wstring> {
+		inline static const std::wstring::value_type eos = L'\0';
+		inline static const std::wstring prefix = L"%";
+		inline static const std::wstring suffix_hs = L"hs";
+		inline static const std::wstring suffix_ls = L"ls";
+		inline static const std::wstring suffix_d32 = L"d";
+		inline static const std::wstring suffix_d64 = L"lld";
+		inline static const std::wstring suffix_u32 = L"u";
+		inline static const std::wstring suffix_u64 = L"llu";
+		inline static const std::wstring suffix_f = L"f";
+		inline static const std::wstring fmt_p32 = L"0x%08X";
+		inline static const std::wstring fmt_p64 = L"0x%016llX";
+		inline static std::wstring from_hs(const std::string& value) { return to_wide(value); }
+		inline static constexpr const std::wstring& from_ls(const std::wstring& value) { return value; }
+		inline static std::wstring::size_type strlen(const std::wstring::value_type* s) { return ::wcslen(s); }
+		inline static constexpr int sprintf(
+			std::wstring::value_type* buffer, std::wstring::size_type buffer_size,
+			const std::wstring::value_type* fmt, auto&&... args)
+		{
+			return ::swprintf_s(buffer, buffer_size, fmt, args...);
+		}
+	};
+
+	//
 	// C言語のsprintf()を使用して文字列をフォーマット化して返します。
 	//
-	template <size_t MaxSize = 64, typename... Args>
+	template <size_t c_max_size = 64, typename S, typename... Args>
+	_NODISCARD constexpr auto sprintf_S(const S& fmt, Args&&... args) -> S
+	{
+		using utils = Utils<S>;
+
+		auto s = S(c_max_size, utils::eos);
+		utils::sprintf(s.data(), s.size(), fmt.c_str(), args...);
+		s.resize(utils::strlen(s.data()));
+		return s;
+	}
+
+	//
+	// std::string型用のsprintf()です。
+	//
+	template <size_t c_max_size = 64, typename... Args>
 	_NODISCARD constexpr auto sprintf(const std::string& fmt, Args&&... args) -> std::string
 	{
-		auto s = std::string(MaxSize, '\0');
-		sprintf_s(s.data(), s.size(), fmt.c_str(), args...);
-		s.resize(strlen(s.data()));
-		return s;
+		return sprintf_S<c_max_size>(fmt, args...);
 	}
 
 	//
-	// C言語のsprintf()を使用して文字列をフォーマット化して返します。
+	// std::wstring型用のsprintf()です。
 	//
-	template <size_t MaxSize = 64, typename... Args>
+	template <size_t c_max_size = 64, typename... Args>
 	_NODISCARD constexpr auto sprintf(const std::wstring& fmt, Args&&... args) -> std::wstring
 	{
-		auto s = std::wstring(MaxSize, L'\0');
-		swprintf_s(s.data(), s.size(), fmt.c_str(), args...);
-		s.resize(wcslen(s.data()));
-		return s;
+		return sprintf_S<c_max_size>(fmt, args...);
 	}
 
 	//
-	// 文字列化できない型の場合に呼び出されます。
+	// T型の値をS型の文字列に変換して返します。
+	//
+	template <typename S, typename T>
+	_NODISCARD constexpr auto fmt_value_to_string_S(const S& fmt, const T& value, auto... args) -> S
+	{
+		using utils = Utils<S>;
+
+		if constexpr (std::is_same_v<T, std::string>)
+		{
+			return fmt.empty() ? utils::from_hs(value) : sprintf<2048>(utils::prefix + fmt + utils::suffix_hs, args..., value.c_str());
+		}
+		else if constexpr (std::is_same_v<T, std::wstring>)
+		{
+			return fmt.empty() ? utils::from_ls(value) : sprintf<2048>(utils::prefix + fmt + utils::suffix_ls, args..., value.c_str());
+		}
+		else if constexpr(std::is_convertible_v<T, const char*>)
+		{
+			return fmt.empty() ? utils::from_hs(value) : sprintf<2048>(utils::prefix + fmt + utils::suffix_hs, args..., value);
+		}
+		else if constexpr(std::is_convertible_v<T, const wchar_t*>)
+		{
+			return fmt.empty() ? utils::from_ls(value) : sprintf<2048>(utils::prefix + fmt + utils::suffix_ls, args..., value);
+		}
+		else if constexpr(std::is_integral_v<T>)
+		{
+			if constexpr(std::is_signed_v<T>)
+			{
+				if constexpr(sizeof(T) <= 4)
+					return sprintf(utils::prefix + fmt + utils::suffix_d32, args..., value);
+				else
+					return sprintf(utils::prefix + fmt + utils::suffix_d64, args..., value);
+			}
+			else
+			{
+				if constexpr(sizeof(T) <= 4)
+					return sprintf(utils::prefix + fmt + utils::suffix_u32, args..., value);
+				else
+					return sprintf(utils::prefix + fmt + utils::suffix_u64, args..., value);
+			}
+		}
+		else if constexpr(std::is_floating_point_v<T>)
+		{
+			return sprintf(utils::prefix + fmt + utils::suffix_f, args..., value);
+		}
+		else if constexpr(std::is_pointer_v<T>)
+		{
+			if constexpr(sizeof(T) <= 4)
+				return sprintf(utils::fmt_p32, args..., value);
+			else
+				return sprintf(utils::fmt_p64, args..., value);
+		}
+		else
+		{
+			static_assert(std::false_type::value, "この型に対応するfmt_value_to_string()が見つかりませんでした");
+		}
+	}
+
+	//
+	// 指定された値をstd::stringに変換して返します。
 	//
 	template <typename T>
 	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const T& value, auto... args) -> std::string
 	{
-		static_assert(std::false_type::value, "この型に対応するfmt_value_to_string()が見つかりませんでした");
+		return fmt_value_to_string_S<std::string, T>(fmt, value, args...);
 	}
 
 	//
-	// 符号あり32bit整数型をstd::stringに変換します。
+	// 指定された値をstd::stringに変換して返します。
 	//
 	template <typename T>
-	requires std::is_integral_v<T> && std::is_signed_v<T> && (sizeof(T) <= 4)
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const T& value, auto... args) -> std::string
-	{
-		return sprintf("%" + fmt + "d", args..., value);
-	}
-
-	//
-	// 符号あり32bit整数型をstd::wstringに変換します。
-	//
-	template <typename T>
-	requires std::is_integral_v<T> && std::is_signed_v<T> && (sizeof(T) <= 4)
 	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const T& value, auto... args) -> std::wstring
 	{
-		return sprintf(L"%" + fmt + L"d", args..., value);
-	}
-
-	//
-	// 符号あり64bit整数型をstd::stringに変換します。
-	//
-	template <typename T>
-	requires std::is_integral_v<T> && std::is_signed_v<T> && (sizeof(T) == 8)
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const T& value, auto... args) -> std::string
-	{
-		return sprintf("%" + fmt + "I64d", args..., value);
-	}
-
-	//
-	// 符号あり64bit整数型をstd::wstringに変換します。
-	//
-	template <typename T>
-	requires std::is_integral_v<T> && std::is_signed_v<T> && (sizeof(T) == 8)
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const T& value, auto... args) -> std::wstring
-	{
-		return sprintf(L"%" + fmt + L"I64d", args..., value);
-	}
-
-	//
-	// 符号なし32bit整数型をstd::stringに変換します。
-	//
-	template <typename T>
-	requires std::is_integral_v<T> && std::is_unsigned_v<T> && (sizeof(T) <= 4)
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const T& value, auto... args) -> std::string
-	{
-		return sprintf("%" + fmt + "u", args..., value);
-	}
-
-	//
-	// 符号なし32bit整数型をstd::wstringに変換します。
-	//
-	template <typename T>
-	requires std::is_integral_v<T> && std::is_unsigned_v<T> && (sizeof(T) <= 4)
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const T& value, auto... args) -> std::wstring
-	{
-		return sprintf(L"%" + fmt + L"u", args..., value);
-	}
-
-	//
-	// 符号なし64bit整数型をstd::stringに変換します。
-	//
-	template <typename T>
-	requires std::is_integral_v<T> && std::is_unsigned_v<T> && (sizeof(T) == 8)
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const T& value, auto... args) -> std::string
-	{
-		return sprintf("%" + fmt + "I64u", args..., value);
-	}
-
-	//
-	// 符号なし64bit整数型をstd::wstringに変換します。
-	//
-	template <typename T>
-	requires std::is_integral_v<T> && std::is_unsigned_v<T> && (sizeof(T) == 8)
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const T& value, auto... args) -> std::wstring
-	{
-		return sprintf(L"%" + fmt + L"I64u", args..., value);
-	}
-
-	//
-	// 浮動小数点型をstd::stringに変換します。
-	//
-	template <typename T>
-	requires std::is_floating_point_v<T>
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const T& value, auto... args) -> std::string
-	{
-		return sprintf("%" + fmt + "f", args..., value);
-	}
-
-	//
-	// 浮動小数点型をstd::wstringに変換します。
-	//
-	template <typename T>
-	requires std::is_floating_point_v<T>
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const T& value, auto... args) -> std::wstring
-	{
-		return sprintf(L"%" + fmt + L"f", args..., value);
-	}
-
-	//
-	// 32bitポインタ型をstd::stringに変換します。
-	//
-	template <typename T>
-	requires std::is_pointer_v<T> && (sizeof(T) <= 4)
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const T& value, auto... args) -> std::string
-	{
-		return sprintf("0x%08X", value);
-	}
-
-	//
-	// 32bitポインタ型をstd::wstringに変換します。
-	//
-	template <typename T>
-	requires std::is_pointer_v<T> && (sizeof(T) <= 4)
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const T& value, auto... args) -> std::wstring
-	{
-		return sprintf(L"0x%08X", value);
-	}
-
-	//
-	// 64bitポインタ型をstd::stringに変換します。
-	//
-	template <typename T>
-	requires std::is_pointer_v<T> && (sizeof(T) == 8)
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const T& value, auto... args) -> std::string
-	{
-		return sprintf("0x%016X", value);
-	}
-
-	//
-	// 64bitポインタ型をstd::wstringに変換します。
-	//
-	template <typename T>
-	requires std::is_pointer_v<T> && (sizeof(T) == 8)
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const T& value, auto... args) -> std::wstring
-	{
-		return sprintf(L"0x%016X", value);
-	}
-
-	//
-	// const char*型をstd::stringに変換します。
-	//
-	template <typename T>
-	requires std::is_convertible_v<T, const char*>
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const T& value, auto... args) -> std::string
-	{
-		return fmt.empty() ? value : sprintf<2048>("%" + fmt + "hs", args..., value);
-	}
-
-	//
-	// const char*型をstd::wstringに変換します。
-	//
-	template <typename T>
-	requires std::is_convertible_v<T, const char*>
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const T& value, auto... args) -> std::wstring
-	{
-		return fmt.empty() ? to_wide(value) : sprintf<2048>(L"%" + fmt + L"hs", args..., value);
-	}
-
-	//
-	// const wchar_t*型をstd::stringに変換します。
-	//
-	template <typename T>
-	requires std::is_convertible_v<T, const wchar_t*>
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const T& value, auto... args) -> std::string
-	{
-		return fmt.empty() ? from_wide(value) : sprintf<2048>("%" + fmt + "ws", args..., value);
-	}
-
-	//
-	// const wchar_t*型をstd::wstringに変換します。
-	//
-	template <typename T>
-	requires std::is_convertible_v<T, const wchar_t*>
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const T& value, auto... args) -> std::wstring
-	{
-		return fmt.empty() ? value : sprintf<2048>(L"%" + fmt + L"ws", args..., value);
-	}
-
-	//
-	// std::string型をstd::stringに変換します。
-	//
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const std::string& value, auto... args) -> std::string
-	{
-		return fmt.empty() ? value : sprintf<2048>("%" + fmt + "hs", args..., value.c_str());
-	}
-
-	//
-	// std::string型をstd::wstringに変換します。
-	//
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const std::string& value, auto... args) -> std::wstring
-	{
-		return fmt.empty() ? to_wide(value) : sprintf<2048>(L"%" + fmt + L"hs", args..., value.c_str());
-	}
-
-	//
-	// std::wstring型をstd::stringに変換します。
-	//
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const std::wstring& value, auto... args) -> std::string
-	{
-		return fmt.empty() ? from_wide(value) : sprintf<2048>("%" + fmt + "ws", args..., value.c_str());
-	}
-
-	//
-	// std::wstring型をstd::wstringに変換します。
-	//
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const std::wstring& value, auto... args) -> std::wstring
-	{
-		return fmt.empty() ? value : sprintf<2048>(L"%" + fmt + L"ws", args..., value.c_str());
+		return fmt_value_to_string_S<std::wstring, T>(fmt, value, args...);
 	}
 #ifdef _FILESYSTEM_
 	//
-	// std::filesystem::path型をstd::stringに変換します。
+	// std::filesystem::pathをstd::stringに変換します。
 	//
-	template <typename T>
-	requires std::is_same_v<T, std::filesystem::path>
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const T& value, auto... args) -> std::string
+	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const std::filesystem::path& value, auto... args) -> std::string
 	{
 		return fmt_value_to_string(fmt, value.string(), args...);
 	}
 
 	//
-	// std::filesystem::path型をstd::wstringに変換します。
+	// std::filesystem::pathをstd::wstringに変換します。
 	//
-	template <typename T>
-	requires std::is_same_v<T, std::filesystem::path>
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const T& value, auto... args) -> std::wstring
+	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const std::filesystem::path& value, auto... args) -> std::wstring
 	{
 		return fmt_value_to_string(fmt, value.wstring(), args...);
 	}
 #endif
+	//
+	// この構造体は自分でサフィックスを指定するために使用されます。
+	//
 	template <typename T>
 	struct own { const T& value; };
 
@@ -365,7 +284,7 @@ namespace sprintfmt
 	template <typename T>
 	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const own<T>& value, auto... args) -> std::string
 	{
-		return sprintf("%" + fmt, args..., value.value);
+		return sprintf(Utils<std::string>::prefix + fmt, args..., value.value);
 	}
 
 	//
@@ -374,37 +293,37 @@ namespace sprintfmt
 	template <typename T>
 	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const own<T>& value, auto... args) -> std::wstring
 	{
-		return sprintf(L"%" + fmt, args..., value.value);
+		return sprintf(Utils<std::wstring>::prefix + fmt, args..., value.value);
 	}
 
 	//
-	// このクラスはユーティリティです。
+	// この構造体はヘルパーです。
 	//
-	template <typename String> struct Utils;
+	template <typename S> struct Helper;
 
 	//
-	// このクラスはstd::string型に特殊化されたユーティリティです。
+	// この構造体はstd::string型に特殊化されたヘルパーです。
 	//
-	template <> struct Utils<std::string>
+	template <> struct Helper<std::string>
 	{
 		//
 		// フォーマット用のキーワードです。
 		//
-		inline static constexpr struct
-		{
-			inline static const std::string
-				begin = "{/",
-				end = "}",
-				escape = "/",
-				separator = "$",
-				invalid_arg_index = "invalid_arg_index";
+		inline static constexpr struct {
+			inline static const std::string begin = "{/";
+			inline static const std::string end = "}";
+			inline static const std::string escape = "/";
+			inline static const std::string separator = "$";
+			inline static const std::string invalid_arg_index = "invalid_arg_index";
 		} keyword;
 
 		//
 		// 指定された文字列の出現位置を返します。
 		//
-		inline static const char* find_str(
-			const char* str_begin, const char* str_end, const std::string& pattern)
+		inline static const std::string::value_type* find_str(
+			const std::string::value_type* str_begin,
+			const std::string::value_type* str_end,
+			const std::string& pattern)
 		{
 			// 文字列が無効の場合は失敗します。
 			if (str_begin >= str_end) return nullptr;
@@ -419,7 +338,7 @@ namespace sprintfmt
 			if (str_length < pattern.length()) return nullptr;
 
 			// mbrlen()が使用する変数です。
-			mbstate_t mb_state = {};
+			auto mb_state = mbstate_t {};
 
 			// 文字列の長さからパターンの長さを除いた数だけループします。
 			for (auto p = str_begin; p <= str_end - pattern.length();)
@@ -452,28 +371,28 @@ namespace sprintfmt
 	};
 
 	//
-	// このクラスはstd::wstring型に特殊化されたユーティリティです。
+	// この構造体はstd::wstring型に特殊化されたヘルパーです。
 	//
-	template <> struct Utils<std::wstring>
+	template <> struct Helper<std::wstring>
 	{
 		//
 		// フォーマット用のキーワードです。
 		//
-		inline static constexpr struct
-		{
-			inline static const std::wstring
-				begin = L"{/",
-				end = L"}",
-				escape = L"/",
-				separator = L"$",
-				invalid_arg_index = L"invalid_arg_index";
+		inline static constexpr struct {
+			inline static const std::wstring begin = L"{/";
+			inline static const std::wstring end = L"}";
+			inline static const std::wstring escape = L"/";
+			inline static const std::wstring separator = L"$";
+			inline static const std::wstring invalid_arg_index = L"invalid_arg_index";
 		} keyword;
 
 		//
 		// 指定された文字列の出現位置を返します。
 		//
-		inline static const wchar_t* find_str(
-			const wchar_t* str_begin, const wchar_t* str_end, const std::wstring& pattern)
+		inline static const std::wstring::value_type* find_str(
+			const std::wstring::value_type* str_begin,
+			const std::wstring::value_type* str_end,
+			const std::wstring& pattern)
 		{
 			// 文字列が無効の場合は失敗します。
 			if (str_begin >= str_end) return nullptr;
@@ -509,54 +428,43 @@ namespace sprintfmt
 	};
 
 	//
-	// このクラスはstd::string型用のサブフォーマッタ生成関数オブジェクトです。
+	// この構造体はサブフォーマッタ生成関数オブジェクトです。
 	//
-	struct make_sub_formatter_s {
+	template <typename S>
+	struct MakeSubFormatter {
 		template <typename T, typename... Args>
 		constexpr auto operator()(const T& value, Args&&... args) const {
-			return [&](const std::string& fmt) {
+			return [&](const S& fmt) {
 				return fmt_value_to_string(fmt, value, args...);
 			};
 		}
 	};
 
 	//
-	// このクラスはstd::wstring型用のサブフォーマッタ生成関数オブジェクトです。
+	// この構造体はフォーマッタです。
 	//
-	struct make_sub_formatter_w {
-		template <typename T, typename... Args>
-		constexpr auto operator()(const T& value, Args&&... args) const {
-			return [&](const std::wstring& fmt) {
-				return fmt_value_to_string(fmt, value, args...);
-			};
-		}
-	};
-
-	//
-	// このクラスはフォーマッタです。
-	//
-	template <typename String, typename MakeSubFormatter>
+	template <typename S, typename M>
 	struct Formatter
 	{
 		//
-		// フォーマット用のユーティリティです。
+		// フォーマット用のヘルパーです。
 		//
-		inline static const Utils<String> utils;
+		inline static const Helper<S> utils;
 
 		//
 		// 新規作成したサブフォーマッタを使用して文字列化を実行します。
 		//
 		template <typename T>
-		inline static constexpr auto use_sub_formatter(const T& value, const String& fmt)
+		inline static constexpr auto use_sub_formatter(const T& value, const S& fmt)
 		{
-			return use_sub_formatter(MakeSubFormatter()(value), fmt);
+			return use_sub_formatter(M()(value), fmt);
 		}
 
 		//
 		// 既存のサブフォーマッタを使用して文字列化を実行します。
 		//
 		template <typename T>
-		inline static constexpr auto use_sub_formatter(T&& sub_formatter, const String& fmt)
+		inline static constexpr auto use_sub_formatter(T&& sub_formatter, const S& fmt)
 		requires requires { std::forward<T>(sub_formatter)(fmt); } // 引数がサブフォーマッタ(ラムダ)の場合は
 		{
 			return sub_formatter(fmt);
@@ -565,7 +473,7 @@ namespace sprintfmt
 		//
 		// インデックスで指定された引数が存在しなかった場合に呼び出されます。
 		//
-		inline static constexpr auto sub_format(size_t index, const String& sub_fmt) -> String
+		inline static constexpr auto sub_format(size_t index, const S& sub_fmt) -> S
 		{
 			return utils.keyword.invalid_arg_index;
 		}
@@ -574,7 +482,7 @@ namespace sprintfmt
 		// インデックスで指定された引数をサブフォーマット化した文字列を返します。
 		//
 		template <typename Head, typename... Tail>
-		inline static constexpr auto sub_format(size_t index, const String& sub_fmt, Head&& head, Tail&&... tail) -> String
+		inline static constexpr auto sub_format(size_t index, const S& sub_fmt, Head&& head, Tail&&... tail) -> S
 		{
 			// インデックスが無効の場合は
 			if (index < 1)
@@ -600,15 +508,15 @@ namespace sprintfmt
 		// フォーマット化された文字列を返します。
 		//
 		template <typename... Args>
-		inline static constexpr auto format(const String& fmt, Args&&... args) -> String
+		inline static constexpr auto format(const S& fmt, Args&&... args) -> S
 		{
 			//
-			// このクラスはパターンを検索してその位置を保持します。
+			// この構造体はパターンを検索してその位置を保持します。
 			//
 			struct Finder {
-				const String::value_type* head;
-				const String::value_type* tail;
-				Finder(const String::value_type* begin, const String::value_type* end, const String& pattern)
+				const S::value_type* head;
+				const S::value_type* tail;
+				Finder(const S::value_type* begin, const S::value_type* end, const S& pattern)
 					: head(utils.find_str(begin, end, pattern))
 					, tail(head ? head + pattern.length() : nullptr) {}
 			};
@@ -620,7 +528,7 @@ namespace sprintfmt
 			auto fmt_end = fmt.c_str() + fmt.length();
 
 			// 最終的に返す結果を格納する変数です。
-			auto result = String {};
+			auto result = S {};
 
 			// 現在の使用対象の引数のインデックスです。
 			auto current_arg_index = size_t { 1 };
@@ -660,7 +568,7 @@ namespace sprintfmt
 					auto arg_index = current_arg_index;
 
 					// 文字列化に使用するサブフォーマットです。
-					auto sub_fmt = String {};
+					auto sub_fmt = S {};
 
 					// セパレータの位置を取得します。
 					auto separator = Finder { begin.tail, end.head, utils.keyword.separator };
@@ -717,7 +625,7 @@ namespace sprintfmt
 	template <typename T, typename... Args>
 	_NODISCARD constexpr auto sfs(const T& value, Args&&... args)
 	{
-		return make_sub_formatter_s()(value, args...);
+		return MakeSubFormatter<std::string>()(value, args...);
 	}
 
 	//
@@ -726,7 +634,7 @@ namespace sprintfmt
 	template <typename T, typename... Args>
 	_NODISCARD constexpr auto sfw(const T& value, Args&&... args)
 	{
-		return make_sub_formatter_w()(value, args...);
+		return MakeSubFormatter<std::wstring>()(value, args...);
 	}
 
 	//
@@ -734,9 +642,9 @@ namespace sprintfmt
 	// フォーマット化された文字列を返します。
 	//
 	template <typename... Args>
-	_NODISCARD auto format(const std::string& fmt, Args&&... args) -> std::string
+	_NODISCARD constexpr auto format(const std::string& fmt, Args&&... args) -> std::string
 	{
-		return sprintfmt::Formatter<std::string, make_sub_formatter_s>::format(fmt, args...);
+		return sprintfmt::Formatter<std::string, MakeSubFormatter<std::string>>::format(fmt, args...);
 	}
 
 	//
@@ -744,8 +652,8 @@ namespace sprintfmt
 	// フォーマット化されたワイド文字列を返します。
 	//
 	template <typename... Args>
-	_NODISCARD auto format(const std::wstring& fmt, Args&&... args) -> std::wstring
+	_NODISCARD constexpr auto format(const std::wstring& fmt, Args&&... args) -> std::wstring
 	{
-		return sprintfmt::Formatter<std::wstring, make_sub_formatter_w>::format(fmt, args...);
+		return sprintfmt::Formatter<std::wstring, MakeSubFormatter<std::wstring>>::format(fmt, args...);
 	}
 }

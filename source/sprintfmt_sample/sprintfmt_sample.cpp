@@ -113,10 +113,14 @@ namespace for_each_type
 
 namespace custom_sub_fmt
 {
+	template <typename S>
+	struct MakeSubFormatter {};
+
 	//
 	// このクラスはstd::string型用のサブフォーマッタ生成関数オブジェクトです。
 	//
-	struct make_sub_formatter_s {
+	template <>
+	struct MakeSubFormatter<std::string> {
 		template <typename T, typename... Args>
 		constexpr auto operator()(const T& value, Args&&... args) const {
 			return [&](const std::string& fmt)
@@ -140,7 +144,8 @@ namespace custom_sub_fmt
 	//
 	// このクラスはstd::wstring型用のサブフォーマッタ生成関数オブジェクトです。
 	//
-	struct make_sub_formatter_w {
+	template <>
+	struct MakeSubFormatter<std::wstring> {
 		template <typename T, typename... Args>
 		constexpr auto operator()(const T& value, Args&&... args) const {
 			return [&](const std::wstring& fmt)
@@ -168,17 +173,16 @@ namespace custom_sub_fmt
 	template <typename T, typename... Args>
 	_NODISCARD constexpr auto sfs(const T& value, Args&&... args)
 	{
-		return make_sub_formatter_s()(value, args...);
+		return MakeSubFormatter<std::string>()(value, args...);
 	}
 
 	//
 	// std::wstring型用のカスタムフォーマッタを作成して返します。
 	// 少ない文字数でコーディングできるようにするための処理なので、必須の定義ではありません。
-	//
 	template <typename T, typename... Args>
 	_NODISCARD constexpr auto sfw(const T& value, Args&&... args)
 	{
-		return make_sub_formatter_w()(value, args...);
+		return MakeSubFormatter<std::wstring>()(value, args...);
 	}
 
 	//
@@ -188,7 +192,7 @@ namespace custom_sub_fmt
 	template <typename... Args>
 	_NODISCARD constexpr auto format(const std::string& fmt, Args&&... args) -> std::string
 	{
-		return sprintfmt::Formatter<std::string, make_sub_formatter_s>::format(fmt, args...);
+		return sprintfmt::Formatter<std::string, MakeSubFormatter<std::string>>::format(fmt, args...);
 	}
 
 	//
@@ -198,7 +202,7 @@ namespace custom_sub_fmt
 	template <typename... Args>
 	_NODISCARD constexpr auto format(const std::wstring& fmt, Args&&... args) -> std::wstring
 	{
-		return sprintfmt::Formatter<std::wstring, make_sub_formatter_w>::format(fmt, args...);
+		return sprintfmt::Formatter<std::wstring, MakeSubFormatter<std::wstring>>::format(fmt, args...);
 	}
 
 	//
