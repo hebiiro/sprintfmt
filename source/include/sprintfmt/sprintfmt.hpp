@@ -101,6 +101,7 @@ namespace sprintfmt
 	//
 	template <> struct Utils<std::string> {
 		inline static const std::string::value_type eos = '\0';
+		inline static const std::string null_pointer = "(null)";
 		inline static const std::string prefix = "%";
 		inline static const std::string suffix_hs = "hs";
 		inline static const std::string suffix_ls = "ls";
@@ -118,7 +119,7 @@ namespace sprintfmt
 			std::string::value_type* buffer, std::string::size_type buffer_size,
 			const std::string::value_type* fmt, auto&&... args)
 		{
-			return ::sprintf_s(buffer, buffer_size, fmt, args...);
+			return ::_snprintf_s(buffer, buffer_size, _TRUNCATE, fmt, args...);
 		}
 	};
 
@@ -127,6 +128,7 @@ namespace sprintfmt
 	//
 	template <> struct Utils<std::wstring> {
 		inline static const std::wstring::value_type eos = L'\0';
+		inline static const std::wstring null_pointer = L"(null)";
 		inline static const std::wstring prefix = L"%";
 		inline static const std::wstring suffix_hs = L"hs";
 		inline static const std::wstring suffix_ls = L"ls";
@@ -144,7 +146,7 @@ namespace sprintfmt
 			std::wstring::value_type* buffer, std::wstring::size_type buffer_size,
 			const std::wstring::value_type* fmt, auto&&... args)
 		{
-			return ::swprintf_s(buffer, buffer_size, fmt, args...);
+			return ::_snwprintf_s(buffer, buffer_size, _TRUNCATE, fmt, args...);
 		}
 	};
 
@@ -188,53 +190,81 @@ namespace sprintfmt
 	{
 		using utils = Utils<S>;
 
-		if constexpr (std::is_same_v<T, std::string>)
+		// サブフォーマットが指定されている場合は
+		// 指定されている書式を使用します。
+		if (fmt.length())
 		{
-			return fmt.empty() ? utils::from_hs(value) : sprintf<2048>(utils::prefix + fmt + utils::suffix_hs, args..., value.c_str());
-		}
-		else if constexpr (std::is_same_v<T, std::wstring>)
-		{
-			return fmt.empty() ? utils::from_ls(value) : sprintf<2048>(utils::prefix + fmt + utils::suffix_ls, args..., value.c_str());
-		}
-		else if constexpr(std::is_convertible_v<T, const char*>)
-		{
-			return fmt.empty() ? utils::from_hs(value) : sprintf<2048>(utils::prefix + fmt + utils::suffix_hs, args..., value);
-		}
-		else if constexpr(std::is_convertible_v<T, const wchar_t*>)
-		{
-			return fmt.empty() ? utils::from_ls(value) : sprintf<2048>(utils::prefix + fmt + utils::suffix_ls, args..., value);
-		}
-		else if constexpr(std::is_integral_v<T>)
-		{
-			if constexpr(std::is_signed_v<T>)
+			if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::wstring>)
 			{
-				if constexpr(sizeof(T) <= 4)
-					return sprintf(utils::prefix + fmt + utils::suffix_d32, args..., value);
-				else
-					return sprintf(utils::prefix + fmt + utils::suffix_d64, args..., value);
+				return sprintf<2048>(utils::prefix + fmt, args..., value.c_str());
+			}
+			else if constexpr(std::is_convertible_v<T, const char*> || std::is_convertible_v<T, const wchar_t*>)
+			{
+				return sprintf<2048>(utils::prefix + fmt, args..., value);
 			}
 			else
 			{
-				if constexpr(sizeof(T) <= 4)
-					return sprintf(utils::prefix + fmt + utils::suffix_u32, args..., value);
-				else
-					return sprintf(utils::prefix + fmt + utils::suffix_u64, args..., value);
+				return sprintf(utils::prefix + fmt, args..., value);
 			}
 		}
-		else if constexpr(std::is_floating_point_v<T>)
-		{
-			return sprintf(utils::prefix + fmt + utils::suffix_f, args..., value);
-		}
-		else if constexpr(std::is_pointer_v<T>)
-		{
-			if constexpr(sizeof(T) <= 4)
-				return sprintf(utils::fmt_p32, args..., value);
-			else
-				return sprintf(utils::fmt_p64, args..., value);
-		}
+		// サブフォーマットが指定されていない場合は
+		// 型に合わせて書式を設定します。
 		else
 		{
-			static_assert(std::false_type::value, "この型に対応するfmt_value_to_string()が見つかりませんでした");
+			if constexpr (std::is_convertible_v<T, const char*>)
+			{
+				if constexpr (std::is_pointer_v<T>)
+					return value ? utils::from_hs(value) : utils::null_pointer;
+				else
+					return utils::from_hs(value);
+			}
+			else if constexpr (std::is_convertible_v<T, const wchar_t*>)
+			{
+				if constexpr (std::is_pointer_v<T>)
+					return value ? utils::from_ls(value) : utils::null_pointer;
+				else
+					return utils::from_ls(value);
+			}
+			else if constexpr (std::is_same_v<T, std::string>)
+			{
+				return utils::from_hs(value);
+			}
+			else if constexpr (std::is_same_v<T, std::wstring>)
+			{
+				return utils::from_ls(value);
+			}
+			else if constexpr(std::is_integral_v<T>)
+			{
+				if constexpr(std::is_signed_v<T>)
+				{
+					if constexpr(sizeof(T) <= 4)
+						return sprintf(utils::prefix + fmt + utils::suffix_d32, args..., value);
+					else
+						return sprintf(utils::prefix + fmt + utils::suffix_d64, args..., value);
+				}
+				else
+				{
+					if constexpr(sizeof(T) <= 4)
+						return sprintf(utils::prefix + fmt + utils::suffix_u32, args..., value);
+					else
+						return sprintf(utils::prefix + fmt + utils::suffix_u64, args..., value);
+				}
+			}
+			else if constexpr(std::is_floating_point_v<T>)
+			{
+				return sprintf(utils::prefix + fmt + utils::suffix_f, args..., value);
+			}
+			else if constexpr(std::is_pointer_v<T> || std::is_enum_v<T>)
+			{
+				if constexpr(sizeof(T) <= 4)
+					return sprintf(utils::fmt_p32, args..., value);
+				else
+					return sprintf(utils::fmt_p64, args..., value);
+			}
+			else
+			{
+				static_assert(std::false_type::value, "この型に対応するfmt_value_to_string()が見つかりませんでした");
+			}
 		}
 	}
 
@@ -272,30 +302,6 @@ namespace sprintfmt
 		return fmt_value_to_string(fmt, value.wstring(), args...);
 	}
 #endif
-	//
-	// この構造体は自分でサフィックスを指定するために使用されます。
-	//
-	template <typename T>
-	struct own { const T& value; };
-
-	//
-	// own<T>をstd::stringに変換します。
-	//
-	template <typename T>
-	_NODISCARD constexpr auto fmt_value_to_string(const std::string& fmt, const own<T>& value, auto... args) -> std::string
-	{
-		return sprintf(Utils<std::string>::prefix + fmt, args..., value.value);
-	}
-
-	//
-	// own<T>型をstd::wstringに変換します。
-	//
-	template <typename T>
-	_NODISCARD constexpr auto fmt_value_to_string(const std::wstring& fmt, const own<T>& value, auto... args) -> std::wstring
-	{
-		return sprintf(Utils<std::wstring>::prefix + fmt, args..., value.value);
-	}
-
 	//
 	// この構造体はヘルパーです。
 	//

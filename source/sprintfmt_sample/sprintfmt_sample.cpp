@@ -27,9 +27,21 @@ namespace simple
 
 		std::cout << std::endl;
 
+		std::cout << "指定の書式をテストします。" << std::endl;
+		std::cout << "0x0ABC" << std::endl;
+		std::cout << format("0x{/04X}", 0xABC) << std::endl;
+
+		std::cout << std::endl;
+
 		std::cout << "複数の引数を書式化します。" << std::endl;
 		std::cout << "456, 456, 789" << std::endl;
 		std::cout << format("{/2$}, {/}, {/}", 123, 456, 789) << std::endl;
+
+		std::cout << std::endl;
+
+		std::cout << "浮動小数点数を幅と精度を指定して書式化します。" << std::endl;
+		std::cout << "   123.457" << std::endl;
+		std::cout << format("{/*.*f}", sfs(123.456789, 10, 3)) << std::endl;
 
 		std::cout << std::endl;
 
@@ -42,15 +54,9 @@ namespace simple
 
 		std::cout << std::endl;
 
-		std::cout << "浮動小数点数を幅と精度を指定して書式化します。" << std::endl;
-		std::cout << "   123.457" << std::endl;
-		std::cout << format("{/*.*}", sfs(123.456789, 10, 3)) << std::endl;
-
-		std::cout << std::endl;
-
-		std::cout << "手動で書式を指定します。" << std::endl;
-		std::cout << "0x000ABC" << std::endl;
-		std::cout << format("0x{/06X}", own(0xabc)) << std::endl;
+		std::cout << "null文字列を書式化します。" << std::endl;
+		std::cout << "(null)" << std::endl;
+		std::cout << format("{/}", (const char*)nullptr) << std::endl;
 
 		std::cout << std::endl;
 
