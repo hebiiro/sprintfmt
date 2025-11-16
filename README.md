@@ -13,7 +13,7 @@
 ## 🚀導入方法
 
 1. `<string>`をインクルードします。
-1. `"sprintfmt/sprintfmt.hpp"`をインクルードします。
+1. `"sprintfmt.hpp"`をインクルードします。
 
 ## 💡使い方
 

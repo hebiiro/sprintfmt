@@ -1,6 +1,6 @@
 ﻿#include <string>
 #include <iostream>
-#include "sprintfmt/sprintfmt.hpp"
+#include "../sprintfmt.hpp"
 
 namespace simple
 {

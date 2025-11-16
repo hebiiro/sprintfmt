@@ -5,18 +5,13 @@ VisualStudioVersion = 17.13.35919.96
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "root", "root", "{DDB4EF12-CC4E-5E88-E6FC-71A802F4DE97}"
 	ProjectSection(SolutionItems) = preProject
-		..\.editorconfig = ..\.editorconfig
-		..\.gitattributes = ..\.gitattributes
-		..\.gitignore = ..\.gitignore
-		..\LICENSE = ..\LICENSE
-		..\README.md = ..\README.md
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "include", "include", "{B9752A14-B1B8-4AAA-83EE-FCF5E7EC1A20}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sprintfmt", "sprintfmt", "{2DB36E1B-6FC8-4F7B-B6B8-EE7127CBB5A0}"
-	ProjectSection(SolutionItems) = preProject
-		include\sprintfmt\sprintfmt.hpp = include\sprintfmt\sprintfmt.hpp
+		.editorconfig = .editorconfig
+		.gitattributes = .gitattributes
+		.gitignore = .gitignore
+		common.props = common.props
+		LICENSE = LICENSE
+		README.md = README.md
+		sprintfmt.hpp = sprintfmt.hpp
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sprintfmt_sample", "sprintfmt_sample\sprintfmt_sample.vcxproj", "{B8BD8C6D-BB01-40F2-B539-4F50C0E56A16}"
@@ -40,9 +35,6 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{2DB36E1B-6FC8-4F7B-B6B8-EE7127CBB5A0} = {B9752A14-B1B8-4AAA-83EE-FCF5E7EC1A20}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {79076051-A224-4A18-885D-D418FC39E40F}
